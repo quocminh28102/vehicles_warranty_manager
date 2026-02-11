@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "559525380223",
+    "project_id": "vehicles-warranty-manager",
+    "storage_bucket": "vehicles-warranty-manager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:559525380223:android:fee4e41b8c20a4e4437f4a",
+        "android_client_info": {
+          "package_name": "com.example.vehicles_warranty_manager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVHxtsMWdrXBgvfzQtNvje7HPHlz14grI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
