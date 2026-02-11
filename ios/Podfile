@@ -11,7 +11,7 @@ project 'Runner', {
 }
 
 def flutter_root
-  generated_xcconfig_path = File.expand_path(File.join('Flutter', 'Generated.xcconfig'), __FILE__)
+  generated_xcconfig_path = File.expand_path(File.join('Flutter', 'Generated.xcconfig'), __dir__)
   unless File.exist?(generated_xcconfig_path)
     raise "#{generated_xcconfig_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first."
   end
