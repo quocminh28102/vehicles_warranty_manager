@@ -1230,6 +1230,9 @@ class _RequestFormDialogState extends State<RequestFormDialog> {
 
   Future<GoogleSignInAccount?> _ensureGoogleSignIn() async {
     final l10n = context.l10n;
+    if (kIsWeb) {
+      return null;
+    }
     if (kIsWeb && googleDriveWebClientId.isEmpty) {
       _showSnack(l10n.googleDriveMissingClientId);
       return null;
