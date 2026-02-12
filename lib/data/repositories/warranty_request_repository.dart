@@ -18,12 +18,20 @@ class WarrantyRequestRepository {
             snapshot.docs.map(WarrantyRequest.fromSnapshot).toList());
   }
 
-  Future<String> add(WarrantyRequest request) async {
+  String generateId() {
+    return _collection.doc().id;
+  }
+
+  Future<String> add(WarrantyRequest request, {String? id}) async {
     final data = request.toMap();
     data['createdAt'] = FieldValue.serverTimestamp();
     data['updatedAt'] = FieldValue.serverTimestamp();
-    final ref = await _collection.add(data);
-    return ref.id;
+    if (id == null || id.isEmpty) {
+      final ref = await _collection.add(data);
+      return ref.id;
+    }
+    await _collection.doc(id).set(data);
+    return id;
   }
 
   Future<void> updateStatus({

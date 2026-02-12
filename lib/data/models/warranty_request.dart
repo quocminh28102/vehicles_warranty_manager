@@ -10,6 +10,41 @@ enum WarrantyRequestStatus {
   done,
 }
 
+enum WarrantyAttachmentType {
+  image,
+  video,
+  file,
+  link,
+}
+
+class WarrantyAttachment {
+  const WarrantyAttachment({
+    required this.url,
+    required this.name,
+    required this.type,
+  });
+
+  final String url;
+  final String name;
+  final WarrantyAttachmentType type;
+
+  factory WarrantyAttachment.fromMap(Map<String, dynamic> data) {
+    return WarrantyAttachment(
+      url: data['url'] as String? ?? '',
+      name: data['name'] as String? ?? '',
+      type: _attachmentTypeFromString(data['type'] as String?),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'url': url,
+      'name': name,
+      'type': type.name,
+    };
+  }
+}
+
 class WarrantyRequest {
   const WarrantyRequest({
     required this.id,
@@ -25,7 +60,7 @@ class WarrantyRequest {
     required this.status,
     required this.dealerId,
     required this.dealerName,
-    this.attachmentLinks,
+    this.attachments = const [],
     this.requestedById,
     this.requestedByEmail,
     this.createdAt,
@@ -45,7 +80,7 @@ class WarrantyRequest {
   final WarrantyRequestStatus status;
   final String dealerId;
   final String dealerName;
-  final List<String>? attachmentLinks;
+  final List<WarrantyAttachment> attachments;
   final String? requestedById;
   final String? requestedByEmail;
   final DateTime? createdAt;
@@ -56,6 +91,7 @@ class WarrantyRequest {
   ) {
     final data = doc.data() ?? <String, dynamic>{};
     final warrantyValue = data['warrantyMonths'];
+    final attachments = _attachmentsFromData(data);
     return WarrantyRequest(
       id: doc.id,
       vin: data['vin'] as String? ?? '',
@@ -70,9 +106,7 @@ class WarrantyRequest {
       status: _statusFromString(data['status'] as String?),
       dealerId: data['dealerId'] as String? ?? '',
       dealerName: data['dealerName'] as String? ?? '',
-      attachmentLinks: (data['attachmentLinks'] as List?)
-          ?.whereType<String>()
-          .toList(),
+      attachments: attachments,
       requestedById: data['requestedById'] as String?,
       requestedByEmail: data['requestedByEmail'] as String?,
       createdAt: readDate(data['createdAt']),
@@ -94,7 +128,7 @@ class WarrantyRequest {
       'status': status.name,
       'dealerId': dealerId,
       'dealerName': dealerName,
-      'attachmentLinks': attachmentLinks,
+      'attachments': attachments.map((attachment) => attachment.toMap()).toList(),
       'requestedById': requestedById,
       'requestedByEmail': requestedByEmail,
       'createdAt': writeDate(createdAt),
@@ -117,4 +151,78 @@ WarrantyRequestStatus _statusFromString(String? value) {
     default:
       return WarrantyRequestStatus.pending;
   }
+}
+
+List<WarrantyAttachment> _attachmentsFromData(Map<String, dynamic> data) {
+  final attachmentsRaw = data['attachments'];
+  if (attachmentsRaw is List) {
+    return attachmentsRaw
+        .whereType<Map>()
+        .map((item) => WarrantyAttachment.fromMap(
+              item.cast<String, dynamic>(),
+            ))
+        .toList();
+  }
+
+  final links = data['attachmentLinks'] as List?;
+  if (links == null) {
+    return const [];
+  }
+  return links.whereType<String>().map(_attachmentFromLegacyLink).toList();
+}
+
+WarrantyAttachment _attachmentFromLegacyLink(String url) {
+  final name = Uri.tryParse(url)?.pathSegments.last;
+  final type = _attachmentTypeFromUrl(url);
+  return WarrantyAttachment(
+    url: url,
+    name: name?.isNotEmpty == true ? name! : url,
+    type: type,
+  );
+}
+
+WarrantyAttachmentType _attachmentTypeFromUrl(String url) {
+  final lower = url.toLowerCase();
+  if (_isImageExtension(lower)) {
+    return WarrantyAttachmentType.image;
+  }
+  if (_isVideoExtension(lower)) {
+    return WarrantyAttachmentType.video;
+  }
+  return WarrantyAttachmentType.link;
+}
+
+WarrantyAttachmentType _attachmentTypeFromString(String? value) {
+  switch (value) {
+    case 'image':
+      return WarrantyAttachmentType.image;
+    case 'video':
+      return WarrantyAttachmentType.video;
+    case 'file':
+      return WarrantyAttachmentType.file;
+    case 'link':
+      return WarrantyAttachmentType.link;
+    default:
+      return WarrantyAttachmentType.file;
+  }
+}
+
+bool _isImageExtension(String value) {
+  return value.endsWith('.png') ||
+      value.endsWith('.jpg') ||
+      value.endsWith('.jpeg') ||
+      value.endsWith('.webp') ||
+      value.endsWith('.gif') ||
+      value.endsWith('.bmp') ||
+      value.endsWith('.heic') ||
+      value.endsWith('.heif');
+}
+
+bool _isVideoExtension(String value) {
+  return value.endsWith('.mp4') ||
+      value.endsWith('.mov') ||
+      value.endsWith('.m4v') ||
+      value.endsWith('.avi') ||
+      value.endsWith('.mkv') ||
+      value.endsWith('.webm');
 }

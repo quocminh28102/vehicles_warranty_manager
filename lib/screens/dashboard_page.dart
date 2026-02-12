@@ -1,15 +1,36 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../data/models/warranty_request.dart';
+import '../data/repositories/dealer_repository.dart';
+import '../data/repositories/vehicle_model_repository.dart';
+import '../data/repositories/warranty_request_repository.dart';
 import '../l10n/localization_extension.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/quick_action_card.dart';
+import 'warranties_page.dart';
 
 class DashboardPage extends StatelessWidget {
-  const DashboardPage({super.key});
+  const DashboardPage({
+    super.key,
+    this.repository,
+    this.modelRepository,
+    this.dealerRepository,
+  });
+
+  final WarrantyRequestRepository? repository;
+  final VehicleModelRepository? modelRepository;
+  final DealerRepository? dealerRepository;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final repo =
+        repository ?? WarrantyRequestRepository(FirebaseFirestore.instance);
+    final modelRepo =
+        modelRepository ?? VehicleModelRepository(FirebaseFirestore.instance);
+    final dealerRepo =
+        dealerRepository ?? DealerRepository(FirebaseFirestore.instance);
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -26,38 +47,92 @@ class DashboardPage extends StatelessWidget {
             QuickActionCard(
               icon: Icons.verified,
               label: l10n.addRequest,
-              onTap: () {},
+              onTap: () => _showRequestForm(context, repo, modelRepo, dealerRepo),
             ),
             QuickActionCard(
               icon: Icons.attach_file,
               label: l10n.attachFile,
-              onTap: () {},
+              onTap: () => _showRequestForm(
+                context,
+                repo,
+                modelRepo,
+                dealerRepo,
+                focusAttachment: true,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 24),
-        _SummaryCards(
-          vehiclesLabel: l10n.summaryRequests,
-          expiringLabel: l10n.summaryPending,
-          appointmentsLabel: l10n.summaryInProgress,
+        StreamBuilder<List<WarrantyRequest>>(
+          stream: repo.watchAll(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final requests = snapshot.data ?? [];
+            final summary = _SummaryData.fromRequests(requests);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SummaryCards(
+                  summary: summary,
+                  totalLabel: l10n.summaryRequests,
+                  pendingLabel: l10n.summaryPending,
+                  inProgressLabel: l10n.summaryInProgress,
+                  approvedLabel: l10n.approved,
+                  doneLabel: l10n.done,
+                  rejectedLabel: l10n.rejected,
+                ),
+                if (requests.isEmpty) ...[
+                  const SizedBox(height: 24),
+                  EmptyState(message: l10n.emptyState),
+                ],
+              ],
+            );
+          },
         ),
-        const SizedBox(height: 24),
-        EmptyState(message: l10n.comingSoon),
       ],
+    );
+  }
+
+  Future<void> _showRequestForm(
+    BuildContext context,
+    WarrantyRequestRepository repo,
+    VehicleModelRepository modelRepo,
+    DealerRepository dealerRepo, {
+    bool focusAttachment = false,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => RequestFormDialog(
+        repository: repo,
+        modelRepository: modelRepo,
+        dealerRepository: dealerRepo,
+        focusAttachment: focusAttachment,
+      ),
     );
   }
 }
 
 class _SummaryCards extends StatelessWidget {
   const _SummaryCards({
-    required this.vehiclesLabel,
-    required this.expiringLabel,
-    required this.appointmentsLabel,
+    required this.summary,
+    required this.totalLabel,
+    required this.pendingLabel,
+    required this.inProgressLabel,
+    required this.approvedLabel,
+    required this.doneLabel,
+    required this.rejectedLabel,
   });
 
-  final String vehiclesLabel;
-  final String expiringLabel;
-  final String appointmentsLabel;
+  final _SummaryData summary;
+  final String totalLabel;
+  final String pendingLabel;
+  final String inProgressLabel;
+  final String approvedLabel;
+  final String doneLabel;
+  final String rejectedLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -66,21 +141,91 @@ class _SummaryCards extends StatelessWidget {
       runSpacing: 12,
       children: [
         _SummaryCard(
-          title: '36',
-          subtitle: vehiclesLabel,
+          title: summary.total.toString(),
+          subtitle: totalLabel,
           icon: Icons.directions_car,
         ),
         _SummaryCard(
-          title: '5',
-          subtitle: expiringLabel,
+          title: summary.pending.toString(),
+          subtitle: pendingLabel,
           icon: Icons.verified,
         ),
         _SummaryCard(
-          title: '3',
-          subtitle: appointmentsLabel,
+          title: summary.inProgress.toString(),
+          subtitle: inProgressLabel,
           icon: Icons.event,
         ),
+        _SummaryCard(
+          title: summary.approved.toString(),
+          subtitle: approvedLabel,
+          icon: Icons.check_circle_outline,
+        ),
+        _SummaryCard(
+          title: summary.done.toString(),
+          subtitle: doneLabel,
+          icon: Icons.done_all,
+        ),
+        _SummaryCard(
+          title: summary.rejected.toString(),
+          subtitle: rejectedLabel,
+          icon: Icons.block,
+        ),
       ],
+    );
+  }
+}
+
+class _SummaryData {
+  const _SummaryData({
+    required this.total,
+    required this.pending,
+    required this.approved,
+    required this.inProgress,
+    required this.done,
+    required this.rejected,
+  });
+
+  final int total;
+  final int pending;
+  final int approved;
+  final int inProgress;
+  final int done;
+  final int rejected;
+
+  factory _SummaryData.fromRequests(List<WarrantyRequest> requests) {
+    var pending = 0;
+    var approved = 0;
+    var inProgress = 0;
+    var done = 0;
+    var rejected = 0;
+
+    for (final request in requests) {
+      switch (request.status) {
+        case WarrantyRequestStatus.pending:
+          pending++;
+          break;
+        case WarrantyRequestStatus.approved:
+          approved++;
+          break;
+        case WarrantyRequestStatus.inProgress:
+          inProgress++;
+          break;
+        case WarrantyRequestStatus.done:
+          done++;
+          break;
+        case WarrantyRequestStatus.rejected:
+          rejected++;
+          break;
+      }
+    }
+
+    return _SummaryData(
+      total: requests.length,
+      pending: pending,
+      approved: approved,
+      inProgress: inProgress,
+      done: done,
+      rejected: rejected,
     );
   }
 }

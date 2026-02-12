@@ -1,8 +1,17 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+﻿import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vehicles_warranty_manager/l10n/app_localizations.dart';
 
+import '../config/google_drive_config.dart';
 import '../data/models/app_user.dart';
 import '../data/models/dealer.dart';
 import '../data/models/upgrade_category.dart';
@@ -15,6 +24,14 @@ import '../data/repositories/warranty_request_repository.dart';
 import '../l10n/localization_extension.dart';
 import '../utils/date_format.dart';
 import '../widgets/empty_state.dart';
+
+Future<void>? _googleSignInInit;
+
+Future<void> _ensureGoogleSignInInitialized() {
+  return _googleSignInInit ??= GoogleSignIn.instance.initialize(
+    clientId: kIsWeb ? googleDriveWebClientId : null,
+  );
+}
 
 class WarrantiesPage extends StatelessWidget {
   const WarrantiesPage({
@@ -81,7 +98,7 @@ class WarrantiesPage extends StatelessWidget {
   ) async {
     await showDialog<void>(
       context: context,
-      builder: (_) => _RequestFormDialog(
+      builder: (_) => RequestFormDialog(
         repository: repo,
         modelRepository: modelRepo,
         dealerRepository: dealerRepo,
@@ -177,11 +194,15 @@ class _RequestDetailsSheet extends StatelessWidget {
           ),
           _InfoRow(label: l10n.issue, value: request.issue),
           _InfoRow(label: l10n.description, value: request.description),
-          if (request.attachmentLinks?.isNotEmpty ?? false)
-            _InfoRow(
-              label: l10n.attachmentLinks,
-              value: request.attachmentLinks!.join(', '),
+          if (request.attachments.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              l10n.attachments,
+              style: Theme.of(context).textTheme.titleSmall,
             ),
+            const SizedBox(height: 8),
+            _AttachmentsSection(attachments: request.attachments),
+          ],
           if ((request.requestedByEmail ?? '').isNotEmpty)
             _InfoRow(
               label: l10n.requester,
@@ -306,28 +327,176 @@ class _StatusButton extends StatelessWidget {
   }
 }
 
-class _RequestFormDialog extends StatefulWidget {
-  const _RequestFormDialog({
+class _AttachmentsSection extends StatelessWidget {
+  const _AttachmentsSection({required this.attachments});
+
+  final List<WarrantyAttachment> attachments;
+
+  @override
+  Widget build(BuildContext context) {
+    final images = attachments
+        .where((attachment) => attachment.type == WarrantyAttachmentType.image)
+        .toList();
+    final videos = attachments
+        .where((attachment) => attachment.type == WarrantyAttachmentType.video)
+        .toList();
+    final others = attachments
+        .where(
+          (attachment) =>
+              attachment.type == WarrantyAttachmentType.file ||
+              attachment.type == WarrantyAttachmentType.link,
+        )
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (images.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: images
+                .map((attachment) => _AttachmentThumbnail(attachment: attachment))
+                .toList(),
+          ),
+        if (videos.isNotEmpty) ...[
+          if (images.isNotEmpty) const SizedBox(height: 12),
+          Column(
+            children: videos
+                .map(
+                  (attachment) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.play_circle_outline),
+                    title: Text(
+                      attachment.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      attachment.url,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => _openAttachmentUrl(context, attachment.url),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+        if (others.isNotEmpty) ...[
+          if (images.isNotEmpty || videos.isNotEmpty)
+            const SizedBox(height: 12),
+          Column(
+            children: others
+                .map(
+                  (attachment) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      attachment.type == WarrantyAttachmentType.link
+                          ? Icons.link
+                          : Icons.insert_drive_file_outlined,
+                    ),
+                    title: Text(
+                      attachment.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      attachment.url,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => _openAttachmentUrl(context, attachment.url),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AttachmentThumbnail extends StatelessWidget {
+  const _AttachmentThumbnail({required this.attachment});
+
+  final WarrantyAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = _imagePreviewUrl(attachment);
+    return InkWell(
+      onTap: () => _showImagePreview(context, attachment),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 96,
+          height: 96,
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image_outlined),
+            ),
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) {
+                return child;
+              }
+              return const Center(child: CircularProgressIndicator());
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class RequestFormDialog extends StatefulWidget {
+  const RequestFormDialog({
+    super.key,
     required this.repository,
     required this.modelRepository,
     required this.dealerRepository,
+    this.focusAttachment = false,
   });
 
   final WarrantyRequestRepository repository;
   final VehicleModelRepository modelRepository;
   final DealerRepository dealerRepository;
+  final bool focusAttachment;
 
   @override
-  State<_RequestFormDialog> createState() => _RequestFormDialogState();
+  State<RequestFormDialog> createState() => _RequestFormDialogState();
 }
 
-class _RequestFormDialogState extends State<_RequestFormDialog> {
+class _RequestFormDialogState extends State<RequestFormDialog> {
+  static const int _maxAttachmentSizeBytes = 50 * 1024 * 1024;
+  static const List<String> _allowedExtensions = [
+    'png',
+    'jpg',
+    'jpeg',
+    'webp',
+    'gif',
+    'bmp',
+    'heic',
+    'heif',
+    'mp4',
+    'mov',
+    'm4v',
+    'avi',
+    'mkv',
+    'webm',
+  ];
+
   final _formKey = GlobalKey<FormState>();
   final _vinController = TextEditingController();
   final _modelController = TextEditingController();
   final _issueController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _attachmentLinksController = TextEditingController();
+  final List<_LocalAttachment> _pendingAttachments = [];
+  final FocusNode _attachmentFocus = FocusNode();
   DateTime _upgradeDate = DateTime.now();
   bool _busy = false;
   String? _selectedModelId;
@@ -338,12 +507,26 @@ class _RequestFormDialogState extends State<_RequestFormDialog> {
   List<Dealer> _dealersCache = const [];
 
   @override
+  void initState() {
+    super.initState();
+    _ensureGoogleSignInInitialized();
+    if (widget.focusAttachment) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          FocusScope.of(context).requestFocus(_attachmentFocus);
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _vinController.dispose();
     _modelController.dispose();
     _issueController.dispose();
     _descriptionController.dispose();
     _attachmentLinksController.dispose();
+    _attachmentFocus.dispose();
     super.dispose();
   }
 
@@ -522,11 +705,83 @@ class _RequestFormDialogState extends State<_RequestFormDialog> {
                           decoration: InputDecoration(labelText: l10n.description),
                           maxLines: 2,
                         ),
+                        const SizedBox(height: 12),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            l10n.attachments,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            FilledButton.tonalIcon(
+                              onPressed: _busy
+                                  ? null
+                                  : () => _pickAttachments(
+                                        _AttachmentDestination.firebaseStorage,
+                                      ),
+                              icon: const Icon(Icons.upload),
+                              label: Text(l10n.addAttachments),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _busy
+                                  ? null
+                                  : () => _pickAttachments(
+                                        _AttachmentDestination.googleDrive,
+                                      ),
+                              icon: const Icon(Icons.cloud_upload_outlined),
+                              label: Text(l10n.addAttachmentsDrive),
+                            ),
+                            if (_pendingAttachments.isNotEmpty)
+                              Text(
+                                l10n.attachmentsSelected(
+                                  _pendingAttachments.length,
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (_pendingAttachments.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Column(
+                            children: _pendingAttachments
+                                .map(
+                                  (attachment) => ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading:
+                                        Icon(_iconForAttachmentType(attachment.type)),
+                                    title: Text(
+                                      attachment.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      '${_formatBytes(attachment.size)} • '
+                                      '${attachment.destination == _AttachmentDestination.googleDrive ? l10n.googleDrive : l10n.firebaseStorage}',
+                                    ),
+                                    trailing: IconButton(
+                                      tooltip: l10n.removeAttachment,
+                                      icon: const Icon(Icons.close),
+                                      onPressed: _busy
+                                          ? null
+                                          : () => _removeAttachment(attachment),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         TextFormField(
                           controller: _attachmentLinksController,
                           decoration: InputDecoration(labelText: l10n.attachmentLinks),
                           maxLines: 2,
+                          focusNode: _attachmentFocus,
+                          autofocus: widget.focusAttachment,
                         ),
                       ],
                     ),
@@ -740,13 +995,53 @@ class _RequestFormDialogState extends State<_RequestFormDialog> {
       }
       return;
     }
-    final links = _attachmentLinksController.text
-        .split(RegExp(r'[\n,]'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
+    final requestId = widget.repository.generateId();
+    final attachments = _linkAttachmentsFromText(
+      _attachmentLinksController.text,
+    );
+    final firebasePending = _pendingAttachments
+        .where(
+          (attachment) =>
+              attachment.destination == _AttachmentDestination.firebaseStorage,
+        )
         .toList();
+    final drivePending = _pendingAttachments
+        .where(
+          (attachment) =>
+              attachment.destination == _AttachmentDestination.googleDrive,
+        )
+        .toList();
+    if (drivePending.isNotEmpty) {
+      try {
+        final uploadedDrive = await _uploadAttachmentsToDrive(drivePending);
+        attachments.addAll(uploadedDrive);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.toString())),
+          );
+          setState(() => _busy = false);
+        }
+        return;
+      }
+    }
+    if (firebasePending.isNotEmpty) {
+      try {
+        final uploadedFirebase =
+            await _uploadAttachmentsToFirebase(requestId, firebasePending);
+        attachments.addAll(uploadedFirebase);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.toString())),
+          );
+          setState(() => _busy = false);
+        }
+        return;
+      }
+    }
     final request = WarrantyRequest(
-      id: '',
+      id: requestId,
       vin: _vinController.text.trim().toUpperCase(),
       modelId: selectedModel.id,
       model: selectedModel.name,
@@ -759,14 +1054,14 @@ class _RequestFormDialogState extends State<_RequestFormDialog> {
       status: WarrantyRequestStatus.pending,
       dealerId: selectedDealer.id,
       dealerName: selectedDealer.name,
-      attachmentLinks: links.isEmpty ? null : links,
+      attachments: attachments,
       requestedById: user?.uid,
       requestedByEmail: user?.email,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
     try {
-      await widget.repository.add(request);
+      await widget.repository.add(request, id: requestId);
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -775,6 +1070,249 @@ class _RequestFormDialogState extends State<_RequestFormDialog> {
         setState(() => _busy = false);
       }
     }
+  }
+
+  Future<void> _pickAttachments(_AttachmentDestination destination) async {
+    final l10n = context.l10n;
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowMultiple: true,
+        withData: true,
+        allowedExtensions: _allowedExtensions,
+      );
+      if (result == null) {
+        return;
+      }
+      final maxSizeMb = (_maxAttachmentSizeBytes / (1024 * 1024)).round();
+      final newAttachments = <_LocalAttachment>[];
+      for (final file in result.files) {
+        final bytes = file.bytes;
+        if (bytes == null) {
+          _showSnack(l10n.attachmentLoadFailed);
+          continue;
+        }
+        if (file.size > _maxAttachmentSizeBytes) {
+          _showSnack(l10n.attachmentTooLarge(maxSizeMb));
+          continue;
+        }
+        newAttachments.add(
+          _LocalAttachment(
+            name: file.name,
+            bytes: bytes,
+            size: file.size,
+            type: _attachmentTypeForName(file.name),
+            destination: destination,
+          ),
+        );
+      }
+      if (newAttachments.isEmpty) {
+        return;
+      }
+      setState(() {
+        _pendingAttachments.addAll(newAttachments);
+      });
+    } catch (_) {
+      _showSnack(l10n.attachmentLoadFailed);
+    }
+  }
+
+  void _removeAttachment(_LocalAttachment attachment) {
+    setState(() {
+      _pendingAttachments.remove(attachment);
+    });
+  }
+
+  List<WarrantyAttachment> _linkAttachmentsFromText(String raw) {
+    final links = raw
+        .split(RegExp(r'[\n,]'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+    return links
+        .map(
+          (link) => WarrantyAttachment(
+            url: link,
+            name: Uri.tryParse(link)?.pathSegments.last ?? link,
+            type: _attachmentTypeFromUrl(link),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<WarrantyAttachment>> _uploadAttachmentsToFirebase(
+    String requestId,
+    List<_LocalAttachment> attachments,
+  ) async {
+    if (attachments.isEmpty) {
+      return const [];
+    }
+    final storage = FirebaseStorage.instance;
+    final uploaded = <WarrantyAttachment>[];
+    for (final attachment in attachments) {
+      final safeName = attachment.name.replaceAll(RegExp(r'[^\w\.\-]'), '_');
+      final objectPath =
+        'warranty_requests/$requestId/${DateTime.now().millisecondsSinceEpoch}_$safeName';
+      final ref = storage.ref().child(objectPath);
+      final metadata = SettableMetadata(
+        contentType: _contentTypeForAttachment(attachment),
+      );
+      await ref.putData(attachment.bytes, metadata);
+      final url = await ref.getDownloadURL();
+      uploaded.add(
+        WarrantyAttachment(
+          url: url,
+          name: attachment.name,
+          type: attachment.type,
+        ),
+      );
+    }
+    return uploaded;
+  }
+
+  Future<List<WarrantyAttachment>> _uploadAttachmentsToDrive(
+    List<_LocalAttachment> attachments,
+  ) async {
+    if (attachments.isEmpty) {
+      return const [];
+    }
+    final l10n = context.l10n;
+    final account = await _ensureGoogleSignIn();
+    if (account == null) {
+      throw StateError(l10n.googleDriveSignInFailed);
+    }
+    final accessToken = await _authorizeDriveAccess(account);
+    final client = _GoogleAuthClient(accessToken);
+    final api = drive.DriveApi(client);
+    final uploaded = <WarrantyAttachment>[];
+    try {
+      for (final attachment in attachments) {
+        final driveFile = drive.File()..name = attachment.name;
+        final media = drive.Media(
+          Stream<Uint8List>.value(attachment.bytes),
+          attachment.size,
+          contentType:
+              _contentTypeForAttachment(attachment) ?? 'application/octet-stream',
+        );
+        final created = await api.files.create(
+          driveFile,
+          uploadMedia: media,
+          $fields: 'id, webViewLink',
+        );
+        final id = created.id;
+        if (id == null || id.isEmpty) {
+          throw StateError(l10n.googleDriveUploadFailed);
+        }
+        try {
+          await api.permissions.create(
+            drive.Permission(type: 'anyone', role: 'reader'),
+            id,
+          );
+        } catch (_) {
+          _showSnack(l10n.googleDriveShareFailed);
+        }
+        final url =
+            created.webViewLink ?? 'https://drive.google.com/file/d/$id/view';
+        uploaded.add(
+          WarrantyAttachment(
+            url: url,
+            name: attachment.name,
+            type: attachment.type,
+          ),
+        );
+      }
+    } on Exception {
+      throw StateError(l10n.googleDriveUploadFailed);
+    } finally {
+      client.close();
+    }
+    return uploaded;
+  }
+
+  Future<GoogleSignInAccount?> _ensureGoogleSignIn() async {
+    final l10n = context.l10n;
+    if (kIsWeb && googleDriveWebClientId.isEmpty) {
+      _showSnack(l10n.googleDriveMissingClientId);
+      return null;
+    }
+    await _ensureGoogleSignInInitialized();
+    try {
+      GoogleSignInAccount? account;
+      final attempt =
+          GoogleSignIn.instance.attemptLightweightAuthentication();
+      if (attempt != null) {
+        account = await attempt;
+      }
+      account ??= await GoogleSignIn.instance.authenticate(
+        scopeHint: const [drive.DriveApi.driveFileScope],
+      );
+      return account;
+    } on GoogleSignInException {
+      return null;
+    }
+  }
+
+  Future<String> _authorizeDriveAccess(GoogleSignInAccount account) async {
+    final client = account.authorizationClient;
+    final scopes = const [drive.DriveApi.driveFileScope];
+    final existing = await client.authorizationForScopes(scopes);
+    final authz = existing ?? await client.authorizeScopes(scopes);
+    return authz.accessToken;
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  String _formatBytes(int size) {
+    if (size >= 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (size >= 1024) {
+      return '${(size / 1024).toStringAsFixed(1)} KB';
+    }
+    return '$size B';
+  }
+
+  IconData _iconForAttachmentType(WarrantyAttachmentType type) {
+    switch (type) {
+      case WarrantyAttachmentType.image:
+        return Icons.photo;
+      case WarrantyAttachmentType.video:
+        return Icons.play_circle_outline;
+      case WarrantyAttachmentType.link:
+        return Icons.link;
+      case WarrantyAttachmentType.file:
+        return Icons.insert_drive_file_outlined;
+    }
+  }
+
+  String? _contentTypeForAttachment(_LocalAttachment attachment) {
+    final lower = attachment.name.toLowerCase();
+    if (_isImageExtension(lower)) {
+      if (lower.endsWith('.png')) {
+        return 'image/png';
+      }
+      if (lower.endsWith('.gif')) {
+        return 'image/gif';
+      }
+      if (lower.endsWith('.webp')) {
+        return 'image/webp';
+      }
+      return 'image/jpeg';
+    }
+    if (_isVideoExtension(lower)) {
+      if (lower.endsWith('.mov')) {
+        return 'video/quicktime';
+      }
+      return 'video/mp4';
+    }
+    return null;
   }
 
   User? _currentUserOrNull() {
@@ -840,5 +1378,175 @@ DateTime _addMonths(DateTime date, int months) {
   final day = date.day > lastDayOfTargetMonth ? lastDayOfTargetMonth : date.day;
   return DateTime(year, month, day);
 }
+
+Future<void> _openAttachmentUrl(BuildContext context, String url) async {
+  final l10n = context.l10n;
+  final uri = Uri.tryParse(url);
+  if (uri == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.attachmentOpenFailed)),
+    );
+    return;
+  }
+  final launched =
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  if (!launched && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.attachmentOpenFailed)),
+    );
+  }
+}
+
+Future<void> _showImagePreview(
+  BuildContext context,
+  WarrantyAttachment attachment,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      child: InteractiveViewer(
+        child: Image.network(
+          _imagePreviewUrl(attachment),
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) => SizedBox(
+            height: 240,
+            child: Center(
+              child: Icon(
+                Icons.broken_image_outlined,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
+          loadingBuilder: (context, child, progress) {
+            if (progress == null) {
+              return child;
+            }
+            return const SizedBox(
+              height: 240,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          },
+        ),
+      ),
+    ),
+  );
+}
+
+class _GoogleAuthClient extends http.BaseClient {
+  _GoogleAuthClient(this._accessToken);
+
+  final String _accessToken;
+  final http.Client _inner = http.Client();
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) {
+    request.headers['Authorization'] = 'Bearer $_accessToken';
+    return _inner.send(request);
+  }
+
+  @override
+  void close() {
+    _inner.close();
+    super.close();
+  }
+}
+
+class _LocalAttachment {
+  const _LocalAttachment({
+    required this.name,
+    required this.bytes,
+    required this.size,
+    required this.type,
+    required this.destination,
+  });
+
+  final String name;
+  final Uint8List bytes;
+  final int size;
+  final WarrantyAttachmentType type;
+  final _AttachmentDestination destination;
+}
+
+enum _AttachmentDestination {
+  firebaseStorage,
+  googleDrive,
+}
+
+WarrantyAttachmentType _attachmentTypeForName(String name) {
+  final lower = name.toLowerCase();
+  if (_isImageExtension(lower)) {
+    return WarrantyAttachmentType.image;
+  }
+  if (_isVideoExtension(lower)) {
+    return WarrantyAttachmentType.video;
+  }
+  return WarrantyAttachmentType.file;
+}
+
+String _imagePreviewUrl(WarrantyAttachment attachment) {
+  if (attachment.type != WarrantyAttachmentType.image) {
+    return attachment.url;
+  }
+  final driveId = _driveFileIdFromUrl(attachment.url);
+  if (driveId == null) {
+    return attachment.url;
+  }
+  return 'https://drive.google.com/uc?export=view&id=$driveId';
+}
+
+String? _driveFileIdFromUrl(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null) {
+    return null;
+  }
+  if (uri.host.contains('drive.google.com')) {
+    final segments = uri.pathSegments;
+    final fileIndex = segments.indexOf('d');
+    if (fileIndex != -1 && segments.length > fileIndex + 1) {
+      return segments[fileIndex + 1];
+    }
+    final fileId = uri.queryParameters['id'];
+    if (fileId != null && fileId.isNotEmpty) {
+      return fileId;
+    }
+  }
+  return null;
+}
+
+WarrantyAttachmentType _attachmentTypeFromUrl(String url) {
+  final lower = url.toLowerCase();
+  if (_isImageExtension(lower)) {
+    return WarrantyAttachmentType.image;
+  }
+  if (_isVideoExtension(lower)) {
+    return WarrantyAttachmentType.video;
+  }
+  return WarrantyAttachmentType.link;
+}
+
+bool _isImageExtension(String value) {
+  return value.endsWith('.png') ||
+      value.endsWith('.jpg') ||
+      value.endsWith('.jpeg') ||
+      value.endsWith('.webp') ||
+      value.endsWith('.gif') ||
+      value.endsWith('.bmp') ||
+      value.endsWith('.heic') ||
+      value.endsWith('.heif');
+}
+
+bool _isVideoExtension(String value) {
+  return value.endsWith('.mp4') ||
+      value.endsWith('.mov') ||
+      value.endsWith('.m4v') ||
+      value.endsWith('.avi') ||
+      value.endsWith('.mkv') ||
+      value.endsWith('.webm');
+}
+
+
+
+
+
 
 

@@ -112,6 +112,53 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachmentLinks => 'Attachment links (Google Drive)';
 
   @override
+  String get attachments => 'Images & videos';
+
+  @override
+  String get addAttachments => 'Upload files';
+
+  @override
+  String get addAttachmentsDrive => 'Upload to Google Drive';
+
+  @override
+  String attachmentsSelected(Object count) {
+    return '$count files selected';
+  }
+
+  @override
+  String get removeAttachment => 'Remove file';
+
+  @override
+  String attachmentTooLarge(Object size) {
+    return 'File is too large (max $size MB).';
+  }
+
+  @override
+  String get attachmentLoadFailed => 'Could not read file.';
+
+  @override
+  String get attachmentOpenFailed => 'Could not open attachment.';
+
+  @override
+  String get googleDrive => 'Google Drive';
+
+  @override
+  String get firebaseStorage => 'Firebase Storage';
+
+  @override
+  String get googleDriveMissingClientId => 'Google Drive client ID is missing.';
+
+  @override
+  String get googleDriveSignInFailed => 'Google Drive sign-in failed.';
+
+  @override
+  String get googleDriveUploadFailed => 'Google Drive upload failed.';
+
+  @override
+  String get googleDriveShareFailed =>
+      'Uploaded but sharing failed. Check Drive sharing settings.';
+
+  @override
   String get requester => 'Requester';
 
   @override

@@ -36,6 +36,34 @@
     "requestWarranty":  "Yêu cầu bảo hành",
     "addRequest":  "Tạo yêu cầu mới",
     "attachmentLinks":  "Link đính kèm (Google Drive)",
+    "attachments":  "Hình ảnh & video",
+    "addAttachments":  "Tải file",
+    "addAttachmentsDrive":  "Tải lên Google Drive",
+    "attachmentsSelected":  "{count} file đã chọn",
+    "@attachmentsSelected":  {
+                                 "placeholders":  {
+                                                      "count":  {
+
+                                                                }
+                                                  }
+                             },
+    "removeAttachment":  "Xóa file",
+    "attachmentTooLarge":  "File quá lớn (tối đa {size} MB).",
+    "@attachmentTooLarge":  {
+                                "placeholders":  {
+                                                     "size":  {
+
+                                                              }
+                                                 }
+                            },
+    "attachmentLoadFailed":  "Không đọc được file.",
+    "attachmentOpenFailed":  "Không mở được file.",
+    "googleDrive":  "Google Drive",
+    "firebaseStorage":  "Firebase Storage",
+    "googleDriveMissingClientId":  "Thiếu client ID Google Drive.",
+    "googleDriveSignInFailed":  "Đăng nhập Google Drive thất bại.",
+    "googleDriveUploadFailed":  "Upload Google Drive thất bại.",
+    "googleDriveShareFailed":  "Upload xong nhưng không chia sẻ được. Hãy kiểm tra quyền chia sẻ Drive.",
     "requester":  "Người yêu cầu",
     "viewOnly":  "Bạn không có quyền cập nhật trạng thái.",
     "pending":  "Chờ duyệt",

@@ -302,6 +302,90 @@ abstract class AppLocalizations {
   /// **'Attachment links (Google Drive)'**
   String get attachmentLinks;
 
+  /// No description provided for @attachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Images & videos'**
+  String get attachments;
+
+  /// No description provided for @addAttachments.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload files'**
+  String get addAttachments;
+
+  /// No description provided for @addAttachmentsDrive.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload to Google Drive'**
+  String get addAttachmentsDrive;
+
+  /// No description provided for @attachmentsSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} files selected'**
+  String attachmentsSelected(Object count);
+
+  /// No description provided for @removeAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove file'**
+  String get removeAttachment;
+
+  /// No description provided for @attachmentTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'File is too large (max {size} MB).'**
+  String attachmentTooLarge(Object size);
+
+  /// No description provided for @attachmentLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read file.'**
+  String get attachmentLoadFailed;
+
+  /// No description provided for @attachmentOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open attachment.'**
+  String get attachmentOpenFailed;
+
+  /// No description provided for @googleDrive.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Drive'**
+  String get googleDrive;
+
+  /// No description provided for @firebaseStorage.
+  ///
+  /// In en, this message translates to:
+  /// **'Firebase Storage'**
+  String get firebaseStorage;
+
+  /// No description provided for @googleDriveMissingClientId.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Drive client ID is missing.'**
+  String get googleDriveMissingClientId;
+
+  /// No description provided for @googleDriveSignInFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Drive sign-in failed.'**
+  String get googleDriveSignInFailed;
+
+  /// No description provided for @googleDriveUploadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Google Drive upload failed.'**
+  String get googleDriveUploadFailed;
+
+  /// No description provided for @googleDriveShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploaded but sharing failed. Check Drive sharing settings.'**
+  String get googleDriveShareFailed;
+
   /// No description provided for @requester.
   ///
   /// In en, this message translates to:

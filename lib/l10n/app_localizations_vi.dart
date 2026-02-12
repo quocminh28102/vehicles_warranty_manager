@@ -112,6 +112,53 @@ class AppLocalizationsVi extends AppLocalizations {
   String get attachmentLinks => 'Link đính kèm (Google Drive)';
 
   @override
+  String get attachments => 'Hình ảnh & video';
+
+  @override
+  String get addAttachments => 'Tải file';
+
+  @override
+  String get addAttachmentsDrive => 'Tải lên Google Drive';
+
+  @override
+  String attachmentsSelected(Object count) {
+    return '$count file đã chọn';
+  }
+
+  @override
+  String get removeAttachment => 'Xóa file';
+
+  @override
+  String attachmentTooLarge(Object size) {
+    return 'File quá lớn (tối đa $size MB).';
+  }
+
+  @override
+  String get attachmentLoadFailed => 'Không đọc được file.';
+
+  @override
+  String get attachmentOpenFailed => 'Không mở được file.';
+
+  @override
+  String get googleDrive => 'Google Drive';
+
+  @override
+  String get firebaseStorage => 'Firebase Storage';
+
+  @override
+  String get googleDriveMissingClientId => 'Thiếu client ID Google Drive.';
+
+  @override
+  String get googleDriveSignInFailed => 'Đăng nhập Google Drive thất bại.';
+
+  @override
+  String get googleDriveUploadFailed => 'Upload Google Drive thất bại.';
+
+  @override
+  String get googleDriveShareFailed =>
+      'Upload xong nhưng không chia sẻ được. Hãy kiểm tra quyền chia sẻ Drive.';
+
+  @override
   String get requester => 'Người yêu cầu';
 
   @override

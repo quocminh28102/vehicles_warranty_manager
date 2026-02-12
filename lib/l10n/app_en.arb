@@ -36,6 +36,34 @@
     "requestWarranty":  "Request warranty",
     "addRequest":  "New request",
     "attachmentLinks":  "Attachment links (Google Drive)",
+    "attachments":  "Images & videos",
+    "addAttachments":  "Upload files",
+    "addAttachmentsDrive":  "Upload to Google Drive",
+    "attachmentsSelected":  "{count} files selected",
+    "@attachmentsSelected":  {
+                                 "placeholders":  {
+                                                      "count":  {
+
+                                                                }
+                                                  }
+                             },
+    "removeAttachment":  "Remove file",
+    "attachmentTooLarge":  "File is too large (max {size} MB).",
+    "@attachmentTooLarge":  {
+                                "placeholders":  {
+                                                     "size":  {
+
+                                                              }
+                                                 }
+                            },
+    "attachmentLoadFailed":  "Could not read file.",
+    "attachmentOpenFailed":  "Could not open attachment.",
+    "googleDrive":  "Google Drive",
+    "firebaseStorage":  "Firebase Storage",
+    "googleDriveMissingClientId":  "Google Drive client ID is missing.",
+    "googleDriveSignInFailed":  "Google Drive sign-in failed.",
+    "googleDriveUploadFailed":  "Google Drive upload failed.",
+    "googleDriveShareFailed":  "Uploaded but sharing failed. Check Drive sharing settings.",
     "requester":  "Requester",
     "viewOnly":  "You don\u0027t have permission to update status.",
     "pending":  "Pending",
