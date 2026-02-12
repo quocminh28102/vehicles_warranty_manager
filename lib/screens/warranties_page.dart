@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -1177,11 +1178,9 @@ class _RequestFormDialogState extends State<RequestFormDialog> {
       return const [];
     }
     final l10n = context.l10n;
-    final account = await _ensureGoogleSignIn();
-    if (account == null) {
-      throw StateError(l10n.googleDriveSignInFailed);
-    }
-    final accessToken = await _authorizeDriveAccess(account);
+    final accessToken = kIsWeb
+        ? await _authorizeDriveAccessWeb()
+        : await _authorizeDriveAccessMobile();
     final client = _GoogleAuthClient(accessToken);
     final api = drive.DriveApi(client);
     final uploaded = <WarrantyAttachment>[];
@@ -1252,12 +1251,38 @@ class _RequestFormDialogState extends State<RequestFormDialog> {
     }
   }
 
-  Future<String> _authorizeDriveAccess(GoogleSignInAccount account) async {
+  Future<String> _authorizeDriveAccessMobile() async {
+    final l10n = context.l10n;
+    final account = await _ensureGoogleSignIn();
+    if (account == null) {
+      throw StateError(l10n.googleDriveSignInFailed);
+    }
     final client = account.authorizationClient;
     final scopes = const [drive.DriveApi.driveFileScope];
     final existing = await client.authorizationForScopes(scopes);
     final authz = existing ?? await client.authorizeScopes(scopes);
     return authz.accessToken;
+  }
+
+  Future<String> _authorizeDriveAccessWeb() async {
+    final l10n = context.l10n;
+    await _ensureGoogleSignInInitialized();
+    final tokenData = await GoogleSignInPlatform.instance
+        .clientAuthorizationTokensForScopes(
+      ClientAuthorizationTokensForScopesParameters(
+        request: AuthorizationRequestDetails(
+          scopes: const [drive.DriveApi.driveFileScope],
+          userId: null,
+          email: null,
+          promptIfUnauthorized: true,
+        ),
+      ),
+    );
+    final accessToken = tokenData?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw StateError(l10n.googleDriveSignInFailed);
+    }
+    return accessToken;
   }
 
   void _showSnack(String message) {
@@ -1543,6 +1568,7 @@ bool _isVideoExtension(String value) {
       value.endsWith('.mkv') ||
       value.endsWith('.webm');
 }
+
 
 
 
